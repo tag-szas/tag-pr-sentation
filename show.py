@@ -24,13 +24,14 @@ chrome_options.add_experimental_option("useAutomationExtension", False)
 if current_os == "Windows":
     service = Service('./chromedriver.exe')
 elif current_os == "Linux":
-    service = Service('./chromedriver')
+    service = Service('/usr/bin/chromedriver')
 
 try:
     driver = webdriver.Chrome(service=service, options=chrome_options)
 except NoSuchDriverException as e:
     print("Chromedriver nicht gefunden (https://chromedriver.chromium.org/downloads)")
     exit(1)
+
 
 def main():
     overlay_content = '<h1 style="color: white; margin: 20px; text-align:center;">Technik-AG - heute live in Raum 0.06</h1>'
@@ -56,20 +57,24 @@ def main():
 
     # cookies akzeptieren
     click_element(".cc-compliance")
-    click_element(".btn-sidebar-toggle") 
+    click_element(".btn-sidebar-toggle")
 
-    hide_elements([".timeline-container", ".post-avatar",".login-button",".sidebar-wrapper"])
+    hide_elements([".timeline-container", ".post-avatar", ".login-button", ".sidebar-wrapper"])
 
-    set_zoom_level(2)
+    # set_zoom_level(2)
+    set_zoom_level(1.5)
 
     try:
         smooth_scroll_to_end(driver, pause_time=0.0005, scroll_speed=1)
     except Exception as e:
+        raise e
         pass
 
+
 def set_zoom_level(zoom_level):
-    zoom_level = zoom_level*100
+    zoom_level = zoom_level * 100
     driver.execute_script(f"document.body.style.zoom = '{zoom_level}%';")
+
 
 def click_element(selector, by=By.CSS_SELECTOR):
     try:
@@ -77,6 +82,7 @@ def click_element(selector, by=By.CSS_SELECTOR):
         element.click()
     except Exception as e:
         print("Element nicht gefunden oder konnte nicht angeklickt werden:", e)
+
 
 def params(**kwargs):
     return json.dumps(kwargs)
@@ -89,6 +95,7 @@ def bounding_client_rect(selector, by=By.CSS_SELECTOR):
     except Exception as e:
         return None
 
+
 def is_element_in_viewport(selector, by=By.CSS_SELECTOR):
     try:
         element = driver.find_element(by, selector)
@@ -97,7 +104,19 @@ def is_element_in_viewport(selector, by=By.CSS_SELECTOR):
         return False
 
 # Funktion zum Scrollen mit einstellbarer Geschwindigkeit
-def smooth_scroll_to_end(driver, pause_time=1, scroll_speed=300, max_scroll_attempts=50, page_height = 1200, slow = 100, forever = True):
+
+
+def wait_for_no_scroll():
+    old_offset = 0
+    while True:
+        time.sleep(0.03)
+        current_offset = driver.execute_script("return window.pageYOffset")
+        if current_offset == old_offset:
+            return
+        old_offset = current_offset
+
+
+def smooth_scroll_to_end(driver, pause_time=1, scroll_speed=300, max_scroll_attempts=50, page_height=900, slow=100, forever=True):
     scroll_attempts = 0
     last_height = driver.execute_script("return window.pageYOffset")
 
@@ -107,16 +126,19 @@ def smooth_scroll_to_end(driver, pause_time=1, scroll_speed=300, max_scroll_atte
 
         speed = scroll_speed
         if y_offset % page_height > slow:
-            speed = 15*scroll_speed
-        
+            speed = page_height - y_offset % page_height  # 15 * scroll_speed
 
-        driver.execute_script(f"window.scrollBy({params(top=speed,left=0,behavior = "smooth")});")
+        driver.execute_script(f"window.scrollBy({params(top=speed, left=0, behavior="smooth")});")
         time.sleep(pause_time)
+        if speed > 10:
+            wait_for_no_scroll()
+            # time.sleep(0.5)
+        print(speed, y_offset % page_height)
 
         if is_element_in_viewport(".topic-footer-main-buttons"):
             time.sleep(2)
             if forever:
-                driver.execute_script(f"window.scrollTo(0,0);")
+                driver.execute_script("window.scrollTo(0,0);")
             else:
                 break
 
@@ -125,20 +147,22 @@ def smooth_scroll_to_end(driver, pause_time=1, scroll_speed=300, max_scroll_atte
         # print(scroll_attempts, last_height, new_height, y_offset)
         if new_height == last_height:
             if scroll_attempts > 10:
-                break
+                if forever:
+                    driver.execute_script("window.scrollTo(0,0);")
+                else:
+                    break
         else:
-            scroll_attempts = 0 
+            scroll_attempts = 0
 
         last_height = new_height
         scroll_attempts += 1
+
 
 def hide_elements(css_selectors):
     for selector in css_selectors:
         driver.execute_script(f"document.querySelectorAll('{selector}').forEach(el => el.style.display = 'none');")
 
+
 main()
 
 driver.quit()
-
-
-
